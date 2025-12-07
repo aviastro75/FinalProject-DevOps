@@ -1,0 +1,484 @@
+---
+# Bootstrap all nodes with common setup
+- name: Prepare all nodes for Kubernetes
+  hosts: k8s_cluster
+  become: yes
+  gather_facts: yes
+  vars:
+    kube_version: "1.28"
+  
+  tasks:
+    - name: Wait for apt locks to clear
+      shell: |
+        while fuser /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+          sleep 5
+        done
+      changed_when: false
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - nfs-common
+        state: present
+
+    - name: Disable swap
+      shell: |
+        swapoff -a
+        sed -i '/ swap / s/^/#/' /etc/fstab
+      changed_when: false
+
+    - name: Load kernel modules
+      shell: |
+        modprobe overlay
+        modprobe br_netfilter
+      changed_when: false
+
+    - name: Configure kernel modules to load at boot
+      copy:
+        content: |
+          overlay
+          br_netfilter
+        dest: /etc/modules-load.d/k8s.conf
+
+    - name: Configure sysctl for Kubernetes
+      copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+        mode: '0644'
+
+    - name: Apply sysctl settings
+      shell: sysctl --system
+      changed_when: false
+
+# Install containerd on all nodes
+- name: Install containerd
+  hosts: k8s_cluster
+  become: yes
+  
+  tasks:
+    - name: Install containerd
+      apt:
+        name: containerd
+        state: present
+
+    - name: Create containerd config directory
+      file:
+        path: /etc/containerd
+        state: directory
+
+    - name: Generate default containerd config
+      shell: |
+        mkdir -p /etc/containerd
+        containerd config default | tee /etc/containerd/config.toml
+        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+      args:
+        creates: /etc/containerd/config.toml
+
+    - name: Restart containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+
+# Install Kubernetes components on all nodes
+- name: Install Kubernetes components
+  hosts: k8s_cluster
+  become: yes
+  vars:
+    kube_version: "1.28"
+  
+  tasks:
+    - name: Create keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Kubernetes apt key
+      shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{ kube_version }}/deb/Release.key | \
+          gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Add Kubernetes apt repository
+      copy:
+        dest: /etc/apt/sources.list.d/kubernetes.list
+        content: |
+          deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ kube_version }}/deb/ /
+        mode: '0644'
+
+    - name: Install Kubernetes packages
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Hold Kubernetes packages
+      shell: apt-mark hold kubelet kubeadm kubectl
+      changed_when: false
+
+# Initialize master node
+- name: Initialize Kubernetes master
+  hosts: k8s_master
+  become: yes
+  
+  tasks:
+    - name: Set hostname
+      hostname:
+        name: k8s-controller
+
+    - name: Check if cluster is already initialized
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: k8s_initialized
+
+    - name: Reset kubeadm if needed (optional - for clean re-init)
+      shell: kubeadm reset -f
+      when: false  # Set to true only if you want to reset existing cluster
+      failed_when: false
+
+    - name: Initialize Kubernetes cluster
+      shell: kubeadm init --pod-network-cidr=10.244.0.0/16
+      when: not k8s_initialized.stat.exists
+      register: kubeadm_init
+
+    - name: Create .kube directory for ubuntu user
+      file:
+        path: /home/ubuntu/.kube
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Create .kube directory for root
+      file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy admin.conf to ubuntu user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/ubuntu/.kube/config
+        remote_src: yes
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+
+    - name: Copy admin.conf to root
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+        mode: '0644'
+
+    - name: Install Flannel CNI
+      become_user: ubuntu
+      shell: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+      when: not k8s_initialized.stat.exists
+      environment:
+        KUBECONFIG: /home/ubuntu/.kube/config
+
+    - name: Wait for Flannel to be ready
+      pause:
+        seconds: 30
+      when: not k8s_initialized.stat.exists
+
+    - name: Generate join command
+      shell: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Save join command to file
+      copy:
+        content: "{{ join_command.stdout }}"
+        dest: /home/ubuntu/worker-join-command.sh
+        mode: '0755'
+
+    - name: Save join command to local file
+      local_action:
+        module: copy
+        content: "{{ join_command.stdout }}"
+        dest: "./k8s-join-command.sh"
+        mode: '0755'
+
+# Join worker nodes to cluster
+- name: Join worker nodes to cluster
+  hosts: k8s_workers
+  become: yes
+  
+  tasks:
+    - name: Set hostname for workers
+      hostname:
+        name: "k8s-worker-{{ inventory_hostname_short }}"
+
+    - name: Check if node is already joined
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: node_joined
+
+    - name: Reset kubeadm if needed (optional)
+      shell: kubeadm reset -f
+      when: false  # Set to true only if you want to reset existing nodes
+      failed_when: false
+
+    - name: Wait for master to be ready
+      pause:
+        seconds: 20
+      when: not node_joined.stat.exists
+
+    - name: Get join command from master
+      slurp:
+        src: /home/ubuntu/worker-join-command.sh
+      delegate_to: "{{ groups['k8s_master'][0] }}"
+      register: join_command_content
+      when: not node_joined.stat.exists
+      until: join_command_content.content is defined and join_command_content.content | length > 0
+      retries: 5
+      delay: 5
+
+    - name: Join cluster
+      shell: "{{ join_command_content.content | b64decode | trim }}"
+      when: not node_joined.stat.exists
+
+    - name: Wait for node to join
+      pause:
+        seconds: 10
+      when: not node_joined.stat.exists
+
+# Setup NFS server on master
+- name: Setup NFS server on master
+  hosts: k8s_master
+  become: yes
+  vars:
+    nfs_share_path: /srv/nfs/jewelry-data
+    nfs_export_network: "10.0.0.0/16"
+  
+  tasks:
+    - name: Install NFS server
+      apt:
+        name: nfs-kernel-server
+        state: present
+
+    - name: Create NFS export directory
+      file:
+        path: "{{ nfs_share_path }}"
+        state: directory
+        owner: nobody
+        group: nogroup
+        mode: '0777'
+
+    - name: Configure NFS exports
+      lineinfile:
+        path: /etc/exports
+        line: '{{ nfs_share_path }} {{ nfs_export_network }}(rw,sync,no_subtree_check,no_root_squash)'
+        regexp: '^{{ nfs_share_path }}'
+        state: present
+        create: yes
+        backup: yes
+
+    - name: Ensure rpcbind is running
+      systemd:
+        name: rpcbind
+        state: started
+        enabled: yes
+
+    - name: Wait for rpcbind to be ready
+      pause:
+        seconds: 2
+
+    - name: Restart NFS server
+      systemd:
+        name: nfs-kernel-server
+        state: restarted
+        enabled: yes
+
+    - name: Wait for NFS to be ready
+      pause:
+        seconds: 5
+
+    - name: Export NFS shares
+      shell: exportfs -ra
+      changed_when: true
+
+    - name: Check NFS exports
+      shell: showmount -e localhost
+      register: nfs_exports
+      changed_when: false
+      failed_when: false
+
+    - name: Display NFS exports
+      debug:
+        var: nfs_exports.stdout_lines
+      when: nfs_exports.rc == 0
+
+    - name: Create test file on NFS share
+      copy:
+        dest: "{{ nfs_share_path }}/test.txt"
+        content: "NFS Server is working!\n"
+        mode: '0644'
+        owner: nobody
+        group: nogroup
+
+    - name: Get controller private IP for NFS
+      set_fact:
+        controller_ip: "{{ ansible_default_ipv4.address }}"
+
+    - name: Display NFS server info
+      debug:
+        msg: "NFS Server IP: {{ controller_ip }} - Share: {{ nfs_share_path }}"
+
+# Test NFS on worker nodes
+- name: Test NFS connectivity on workers
+  hosts: k8s_workers
+  become: yes
+  vars:
+    nfs_mount_path: /home/ubuntu/nfs-test
+    nfs_share_path: /srv/nfs/jewelry-data
+  
+  tasks:
+    - name: Get controller IP
+      set_fact:
+        controller_ip: "{{ hostvars[groups['k8s_master'][0]]['ansible_default_ipv4']['address'] }}"
+
+    - name: Create test mount point
+      file:
+        path: "{{ nfs_mount_path }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Test NFS connectivity
+      shell: |
+        timeout 30 mount -t nfs -o rw,sync,hard,intr {{ controller_ip }}:{{ nfs_share_path }} {{ nfs_mount_path }}
+      register: mount_result
+      failed_when: false
+      changed_when: mount_result.rc == 0
+
+    - name: Verify mount and read test file
+      shell: cat {{ nfs_mount_path }}/test.txt
+      register: test_file
+      when: mount_result.rc == 0
+      changed_when: false
+
+    - name: Display test file content
+      debug:
+        msg: "✓ NFS working! Test file: {{ test_file.stdout }}"
+      when: 
+        - mount_result.rc == 0
+        - test_file is defined
+
+    - name: Unmount test mount
+      shell: umount {{ nfs_mount_path }}
+      when: mount_result.rc == 0
+      failed_when: false
+
+    - name: Display NFS status
+      debug:
+        msg: "NFS client configured. Controller: {{ controller_ip }}"
+
+# Verify cluster
+- name: Verify cluster
+  hosts: k8s_master
+  become: yes
+  
+  tasks:
+    - name: Wait for all nodes to be ready
+      shell: kubectl get nodes --no-headers | grep -v Ready | wc -l
+      register: not_ready_count
+      until: not_ready_count.stdout | int == 0
+      retries: 20
+      delay: 15
+      changed_when: false
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Display cluster nodes
+      shell: kubectl get nodes -o wide
+      register: cluster_nodes
+      changed_when: false
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Show cluster status
+      debug:
+        msg: "{{ cluster_nodes.stdout_lines }}"
+
+    - name: Display all pods
+      shell: kubectl get pods -A
+      register: all_pods
+      changed_when: false
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Show all pods
+      debug:
+        msg: "{{ all_pods.stdout_lines }}"
+
+# Install Helm on master node
+- name: Install Helm
+  hosts: k8s_master
+  become: yes
+  
+  tasks:
+    - name: Download Helm installation script
+      get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: /tmp/get-helm-3.sh
+        mode: '0700'
+
+    - name: Install Helm
+      shell: /tmp/get-helm-3.sh
+      args:
+        creates: /usr/local/bin/helm
+
+    - name: Verify Helm installation
+      shell: helm version --short
+      register: helm_version
+      changed_when: false
+
+    - name: Display Helm version
+      debug:
+        msg: "Helm installed: {{ helm_version.stdout }}"
+
+    - name: Setup kubectl config for ubuntu user
+      shell: |
+        mkdir -p /home/ubuntu/.kube
+        cp /etc/kubernetes/admin.conf /home/ubuntu/.kube/config
+        chown -R ubuntu:ubuntu /home/ubuntu/.kube
+      args:
+        creates: /home/ubuntu/.kube/config
+
+    - name: Display completion message
+      debug:
+        msg: |
+          ============================================
+          Kubernetes Cluster Setup Complete!
+          ============================================
+          Master Node: k8s-controller
+          Worker Nodes: {{ groups['k8s_workers'] | length }}
+          NFS Server: {{ hostvars[groups['k8s_master'][0]]['ansible_default_ipv4']['address'] }}
+          NFS Share: /srv/nfs/jewelry-data
+          
+          Next steps:
+          1. Deploy application using Helm charts
+          2. Configure LoadBalancer to forward to NodePort
+          3. Test application accessibility
+          ============================================

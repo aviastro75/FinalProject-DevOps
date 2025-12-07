@@ -1,0 +1,175 @@
+# AWS Academy Lab Environment Setup Guide
+
+## Required AWS Credentials from Lab
+
+You need to get these values from AWS Academy Lab:
+
+1. Go to AWS Academy Lab
+2. Click "AWS Details" button
+3. Click "Show" next to AWS CLI credentials
+
+You'll see something like:
+```
+[default]
+aws_access_key_id=ASIA...
+aws_secret_access_key=abc123...
+aws_session_token=IQoJb3JpZ2lu...
+```
+
+## Where to Set These Credentials
+
+### Option 1: AWS CLI Configuration (Recommended for local testing)
+
+**Location:** `~/.aws/credentials` (Linux/Mac) or `C:\Users\YourName\.aws\credentials` (Windows)
+
+```ini
+[default]
+aws_access_key_id = ASIA...
+aws_secret_access_key = abc123...
+aws_session_token = IQoJb3JpZ2lu...
+```
+
+**Also set region in:** `~/.aws/config`
+```ini
+[default]
+region = us-east-1
+```
+
+### Option 2: Environment Variables (For CI/CD)
+
+**Linux/Mac:**
+```bash
+export AWS_ACCESS_KEY_ID="ASIA..."
+export AWS_SECRET_ACCESS_KEY="abc123..."
+export AWS_SESSION_TOKEN="IQoJb3JpZ2lu..."
+export AWS_DEFAULT_REGION="us-east-1"
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:AWS_ACCESS_KEY_ID="ASIA..."
+$env:AWS_SECRET_ACCESS_KEY="abc123..."
+$env:AWS_SESSION_TOKEN="IQoJb3JpZ2lu..."
+$env:AWS_DEFAULT_REGION="us-east-1"
+```
+
+### Option 3: GitHub Secrets (For GitHub Actions CI/CD)
+
+In your GitHub repository:
+1. Go to Settings → Secrets and variables → Actions
+2. Click "New repository secret"
+3. Add these secrets:
+
+```
+Name: AWS_ACCESS_KEY_ID
+Value: ASIA...
+
+Name: AWS_SECRET_ACCESS_KEY
+Value: abc123...
+
+Name: AWS_SESSION_TOKEN
+Value: IQoJb3JpZ2lu...
+
+Name: AWS_REGION
+Value: us-east-1
+```
+
+## SSH Key Setup
+
+### Download from AWS Academy:
+1. In AWS Academy Lab, click "AWS Details"
+2. Click "Download PEM" or "Download PPK"
+3. Save as `labsuser.pem`
+
+### Set Permissions (Linux/Mac):
+```bash
+chmod 400 labsuser.pem
+```
+
+### Where to Place:
+- For manual SSH: Same directory where you run ssh commands
+- For Ansible: Place in `ansible/` directory
+- For GitHub Actions: Upload as secret (see below)
+
+## Docker Hub Credentials (For CI/CD)
+
+You'll also need Docker Hub credentials for pushing images:
+
+### GitHub Secrets for Docker Hub:
+```
+Name: DOCKER_USERNAME
+Value: your-dockerhub-username
+
+Name: DOCKER_PASSWORD
+Value: your-dockerhub-password-or-token
+```
+
+## Terraform Variables to Update
+
+### File: `terraform/terraform.tfvars`
+
+Create this file from the example:
+```bash
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+```
+
+Edit `terraform/terraform.tfvars`:
+```hcl
+aws_region         = "us-east-1"          # Keep as is
+project_name       = "jewelry-shop"       # Or change to your preference
+instance_type      = "t2.medium"          # Keep as is (required for K8s)
+key_name           = "vockey"             # Keep as is (AWS Academy default)
+allowed_ssh_cidr   = "0.0.0.0/0"         # Or change to your IP for security
+```
+
+## Important Notes
+
+### AWS Academy Session Timeout:
+⚠️ AWS Academy credentials expire after 4 hours!
+- You'll need to refresh credentials from AWS Details
+- Update `~/.aws/credentials` or environment variables
+- Re-run failed Terraform/Ansible commands
+
+### Security Best Practice:
+- Never commit credentials to Git
+- `.gitignore` is already configured to exclude:
+  - `terraform.tfvars`
+  - `*.pem`
+  - `*.key`
+  - AWS credentials
+
+## Verification Commands
+
+### Test AWS CLI:
+```bash
+aws sts get-caller-identity
+```
+
+Should return your AWS account details.
+
+### Test Terraform:
+```bash
+cd terraform
+terraform init
+terraform plan
+```
+
+Should connect to AWS successfully.
+
+## Quick Checklist
+
+- [ ] Downloaded AWS credentials from AWS Academy
+- [ ] Updated `~/.aws/credentials` (or set environment variables)
+- [ ] Downloaded `labsuser.pem`
+- [ ] Set permissions on `labsuser.pem` (chmod 400)
+- [ ] Created `terraform/terraform.tfvars` from example
+- [ ] Verified AWS CLI connection (`aws sts get-caller-identity`)
+- [ ] (Optional) Set up Docker Hub credentials for CI/CD
+- [ ] (Optional) Added GitHub Secrets for CI/CD pipeline
+
+## Need Help?
+
+If Terraform fails with "Unable to locate credentials":
+1. Check credentials are in `~/.aws/credentials`
+2. Check session hasn't expired (4-hour limit)
+3. Try running: `aws configure list` to see current config

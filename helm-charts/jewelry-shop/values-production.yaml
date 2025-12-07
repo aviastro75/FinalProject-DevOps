@@ -1,0 +1,44 @@
+# Production values for jewelry-shop
+# Override default values for production deployment
+
+replicaCount: 3
+
+image:
+  repository: your-dockerhub-username/jewelry-shop
+  pullPolicy: Always
+  tag: "latest"
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+persistence:
+  enabled: true
+  size: 5Gi
+  # Set NFS server IP during deployment
+  nfsServer: ""  # e.g., "10.0.1.10"
+  nfsPath: /srv/nfs/jewelry-data
+
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 45
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3

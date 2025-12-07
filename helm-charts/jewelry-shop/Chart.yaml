@@ -1,0 +1,14 @@
+apiVersion: v2
+name: jewelry-shop
+description: A Flask-based jewelry inventory management system
+type: application
+version: 1.0.0
+appVersion: "1.0"
+keywords:
+  - flask
+  - jewelry
+  - inventory
+  - python
+maintainers:
+  - name: DevOps Team
+    email: devops@example.com

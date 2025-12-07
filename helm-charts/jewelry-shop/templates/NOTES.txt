@@ -1,0 +1,54 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}
+
+Application endpoints:
+
+{{- if eq .Values.service.type "NodePort" }}
+1. Get the application URL by running these commands:
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "jewelry-shop.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "Visit http://$NODE_IP:$NODE_PORT to access the Jewelry Shop"
+
+2. Or use the NodePort directly: http://<any-node-ip>:{{ .Values.service.nodePort }}
+
+{{- else if eq .Values.service.type "LoadBalancer" }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        You can watch the status by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "jewelry-shop.fullname" . }}'
+  
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "jewelry-shop.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo "Visit http://$SERVICE_IP:{{ .Values.service.port }} to access the Jewelry Shop"
+
+{{- else if eq .Values.service.type "ClusterIP" }}
+1. Get the application URL by running these commands:
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "jewelry-shop.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  echo "Visit http://127.0.0.1:8080 to access the Jewelry Shop"
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:80
+{{- end }}
+
+Health check endpoint: /health
+
+{{- if .Values.persistence.enabled }}
+
+Persistent storage is enabled using NFS:
+  Server: {{ .Values.persistence.nfsServer }}
+  Path: {{ .Values.persistence.nfsPath }}
+  Size: {{ .Values.persistence.size }}
+{{- else }}
+
+WARNING: Persistence is disabled. Data will be lost when pods restart!
+{{- end }}
+
+To check the pods:
+  kubectl get pods -l app.kubernetes.io/name={{ include "jewelry-shop.name" . }}
+
+To check the service:
+  kubectl get svc {{ include "jewelry-shop.fullname" . }}
+
+To view logs:
+  kubectl logs -l app.kubernetes.io/name={{ include "jewelry-shop.name" . }} --tail=50 -f

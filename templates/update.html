@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update Item</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8fafc;
+        }
+        .sidebar {
+            transition: all 0.3s ease;
+        }
+        .sidebar-hidden {
+            transform: translateX(-100%);
+        }
+        .sidebar-content {
+            transition: margin-left 0.3s ease;
+        }
+        .dark-mode {
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        .dark-mode .card, .dark-mode .form-control {
+            background-color: #2d3748;
+            color: #e2e8f0;
+        }
+        .dark-mode .btn-primary {
+            background-color: #4a5568;
+            border-color: #4a5568;
+        }
+        .dark-mode .btn-primary:hover {
+            background-color: #718096;
+        }
+        .dark-mode .text-gray-600 {
+            color: #a0aec0;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="flex">
+        <!-- Sidebar -->
+        <div class="sidebar fixed inset-y-0 left-0 w-64 bg-gray-800 text-white p-4 z-10">
+            <h2 class="text-2xl font-bold mb-6">Jewelry Inventory</h2>
+            <nav>
+                <a href="{{ url_for('home') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Dashboard</a>
+                <a href="{{ url_for('add_item') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Add New Item</a>
+                <a href="{{ url_for('show_inventory') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Show Inventory</a>
+                <a href="{{ url_for('mark_sold') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Mark Item as Sold</a>
+                <a href="{{ url_for('update_item') }}" class="block py-2 px-4 rounded bg-gray-700">Update Item</a>
+                <a href="{{ url_for('profit_summary') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Profit Summary</a>
+            </nav>
+            <button id="toggle-dark-mode" class="mt-4 px-4 py-2 bg-gray-600 rounded hover:bg-gray-500">Toggle Dark Mode</button>
+        </div>
+        <!-- Main Content -->
+        <div class="sidebar-content flex-1 ml-64 p-6">
+            <button id="toggle-sidebar" class="md:hidden mb-4 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500">Toggle Menu</button>
+            <div class="container mx-auto">
+                <h1 class="text-3xl font-bold mb-6 text-gray-900">Update Item</h1>
+                <div class="card bg-white shadow-md rounded-lg p-6">
+                    {% if error %}
+                    <div class="bg-red-100 text-red-700 p-4 rounded mb-4">{{ error }}</div>
+                    {% endif %}
+                    <form method="post">
+                        <div class="mb-4">
+                            <label for="id" class="block text-gray-600 font-medium mb-2">Item ID:</label>
+                            <input type="number" id="id" name="id" class="form-control w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                        </div>
+                        <div class="mb-4">
+                            <label for="type" class="block text-gray-600 font-medium mb-2">New Type (optional):</label>
+                            <input type="text" id="type" name="type" class="form-control w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="mb-4">
+                            <label for="category" class="block text-gray-600 font-medium mb-2">New Category (optional):</label>
+                            <input type="text" id="category" name="category" class="form-control w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="mb-4">
+                            <label for="cost_price" class="block text-gray-600 font-medium mb-2">New Cost Price (optional):</label>
+                            <input type="number" step="0.01" id="cost_price" name="cost_price" class="form-control w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="mb-4">
+                            <label for="selling_price" class="block text-gray-600 font-medium mb-2">New Selling Price (optional):</label>
+                            <input type="number" step="0.01" id="selling_price" name="selling_price" class="form-control w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="mb-4">
+                            <label for="status" class="block text-gray-600 font-medium mb-2">New Status (available/sold, optional):</label>
+                            <input type="text" id="status" name="status" class="form-control w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <button type="submit" class="btn-primary w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">Update Item</button>
+                    </form>
+                    <a href="{{ url_for('home') }}" class="block mt-4 text-center text-blue-600 hover:underline">Back to Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Sidebar toggle
+        const toggleSidebar = document.getElementById('toggle-sidebar');
+        const sidebar = document.querySelector('.sidebar');
+        const sidebarContent = document.querySelector('.sidebar-content');
+        toggleSidebar.addEventListener('click', () => {
+            sidebar.classList.toggle('sidebar-hidden');
+            sidebarContent.classList.toggle('ml-0');
+            sidebarContent.classList.toggle('ml-64');
+        });
+
+        // Dark mode toggle
+        const toggleDarkMode = document.getElementById('toggle-dark-mode');
+        toggleDarkMode.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+        });
+    </script>
+</body>
+</html>

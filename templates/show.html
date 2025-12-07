@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Current Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8fafc;
+        }
+        .sidebar {
+            transition: all 0.3s ease;
+        }
+        .sidebar-hidden {
+            transform: translateX(-100%);
+        }
+        .sidebar-content {
+            transition: margin-left 0.3s ease;
+        }
+        .dark-mode {
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        .dark-mode .card {
+            background-color: #2d3748;
+            color: #e2e8f0;
+        }
+        .dark-mode .table th {
+            background-color: #4a5568;
+        }
+        .dark-mode .btn-primary {
+            background-color: #4a5568;
+            border-color: #4a5568;
+        }
+        .dark-mode .btn-primary:hover {
+            background-color: #718096;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="flex">
+        <!-- Sidebar -->
+        <div class="sidebar fixed inset-y-0 left-0 w-64 bg-gray-800 text-white p-4 z-10">
+            <h2 class="text-2xl font-bold mb-6">Jewelry Inventory</h2>
+            <nav>
+                <a href="{{ url_for('home') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Dashboard</a>
+                <a href="{{ url_for('add_item') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Add New Item</a>
+                <a href="{{ url_for('show_inventory') }}" class="block py-2 px-4 rounded bg-gray-700">Show Inventory</a>
+                <a href="{{ url_for('mark_sold') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Mark Item as Sold</a>
+                <a href="{{ url_for('update_item') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Update Item</a>
+                <a href="{{ url_for('profit_summary') }}" class="block py-2 px-4 rounded hover:bg-gray-700">Profit Summary</a>
+            </nav>
+            <button id="toggle-dark-mode" class="mt-4 px-4 py-2 bg-gray-600 rounded hover:bg-gray-500">Toggle Dark Mode</button>
+        </div>
+        <!-- Main Content -->
+        <div class="sidebar-content flex-1 ml-64 p-6">
+            <button id="toggle-sidebar" class="md:hidden mb-4 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500">Toggle Menu</button>
+            <div class="container mx-auto">
+                <h1 class="text-3xl font-bold mb-6 text-gray-900">Current Inventory</h1>
+                <div class="card bg-white shadow-md rounded-lg p-6">
+                    {% if items %}
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white border border-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="py-2 px-4 border-b text-left text-gray-600">ID</th>
+                                    <th class="py-2 px-4 border-b text-left text-gray-600">Type</th>
+                                    <th class="py-2 px-4 border-b text-left text-gray-600">Category</th>
+                                    <th class="py-2 px-4 border-b text-left text-gray-600">Cost Price</th>
+                                    <th class="py-2 px-4 border-b text-left text-gray-600">Selling Price</th>
+                                    <th class="py-2 px-4 border-b text-left text-gray-600">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in items %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="py-2 px-4 border-b">{{ item.id }}</td>
+                                    <td class="py-2 px-4 border-b">{{ item.type }}</td>
+                                    <td class="py-2 px-4 border-b">{{ item.category }}</td>
+                                    <td class="py-2 px-4 border-b">${{ item.cost_price }}</td>
+                                    <td class="py-2 px-4 border-b">${{ item.selling_price or 'N/A' }}</td>
+                                    <td class="py-2 px-4 border-b">{{ item.status }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-gray-600 text-center">No items in inventory.</p>
+                    {% endif %}
+                    <a href="{{ url_for('home') }}" class="block mt-4 text-center text-blue-600 hover:underline">Back to Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Sidebar toggle
+        const toggleSidebar = document.getElementById('toggle-sidebar');
+        const sidebar = document.querySelector('.sidebar');
+        const sidebarContent = document.querySelector('.sidebar-content');
+        toggleSidebar.addEventListener('click', () => {
+            sidebar.classList.toggle('sidebar-hidden');
+            sidebarContent.classList.toggle('ml-0');
+            sidebarContent.classList.toggle('ml-64');
+        });
+
+        // Dark mode toggle
+        const toggleDarkMode = document.getElementById('toggle-dark-mode');
+        toggleDarkMode.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+        });
+    </script>
+</body>
+</html>

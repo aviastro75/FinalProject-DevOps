@@ -1,0 +1,7 @@
+# Copy this file to terraform.tfvars and update with your values
+
+aws_region         = "us-east-1"
+project_name       = "jewelry-shop"
+instance_type      = "t2.medium"
+key_name           = "vockey"  # AWS Academy default key
+allowed_ssh_cidr   = "0.0.0.0/0"  # Change to your IP for better security

@@ -1,0 +1,19 @@
+{{- if .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "jewelry-shop.fullname" . }}-pv
+  labels:
+    {{- include "jewelry-shop.labels" . | nindent 4 }}
+    type: nfs
+spec:
+  capacity:
+    storage: {{ .Values.persistence.size }}
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.persistence.storageClass | default "nfs" }}
+  nfs:
+    server: {{ required "NFS server IP is required. Set persistence.nfsServer in values.yaml" .Values.persistence.nfsServer }}
+    path: {{ .Values.persistence.nfsPath }}
+{{- end }}
