@@ -2,7 +2,7 @@
 replicaCount: 2
 
 image:
-  repository: basilm95/jewelry-shop
+  repository: aviastro75/jewelry-shop
   pullPolicy: Always
   tag: "latest"
 
@@ -96,3 +96,4 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
